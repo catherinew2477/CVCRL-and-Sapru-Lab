@@ -45,19 +45,27 @@ library(ggrepel)
 deg_results_colorcode <- deg_results %>%
   mutate(Change = case_when(
     adj.P.Val < 0.05 & logFC > 1 ~ "Increased",
-    adj.P.Val < 0.05 & logFC <= -1 ~ "Decreased",
+    adj.P.Val < 0.05 & logFC < -1 ~ "Decreased",
     TRUE ~ "No change"
   ))
 
-genes_to_label <- c("COL8A1", "CCL2")
+genes_to_label <- c("COL8A1", "KDR", "APC", "ANLN", "CDC27", "HMGCR")
 
-ggplot(res, aes(x = logFC, y = -log10(adj.P.Val))) + geom_point(aes(color = Change), alpha = 0.5) +
-  scale_color_manual(values = c("Increased" = "blue", "Decreased" = "red", "No change" = "darkgrey")) +
-  theme_minimal() + labs(x ="Log2 Fold Change", y = "Significance (-Log10)") +
-  geom_vline(xintercept = c(-1, 1), linetype = "dashed") +
-  geom_hline(yintercept = -log10(0.05), linetype = "dashed")  +
-  geom_text_repel(data = subset(res, X %in% genes_to_label), aes(label = X), size = 5, box.padding = 1, point.padding = 1)
-  
+ggplot(res, aes(x = logFC, y = -log10(adj.P.Val))) +
+geom_point(aes(color = Change), alpha = 0.5) +
+scale_color_manual(values = c("Increased" = "blue", "Decreased" = "red", "No change" = "darkgrey")) +
+theme_minimal() +
+labs(x ="Log2 Fold Change", y = "Significance (-Log10)") +
+geom_vline(xintercept = c(-1, 1), linetype = "dashed") +
+geom_hline(yintercept = -log10(0.05), linetype = "dashed") +
+geom_label_repel(data = subset(res, X %in% genes_to_label), aes(label = X), size = 5, box.padding = 0.5, point.padding = 0.01, segment.color = 'black', segment.size = 0.8) +
+geom_rect(data = res[c(4, 35, 29, 341, 21, 96), ], aes(xmin = logFC - 0.04, xmax = logFC + 0.04,
+                                                      ymin = -log10(adj.P.Val) - 0.04, ymax = -log10(adj.P.Val) + 0.04),
+                                                      color = "black", fill = NA)
+
+# number of downregulated and upregulated genes
+sum(res$Change == "Decreased")
+sum(res$Change == "Increased")
 
 # label genes, convert from Ensembl ID
 gene_symbols <- mapIds(org.Hs.eg.db,
@@ -76,18 +84,23 @@ write.csv(res, "labeled_res.csv")
 
 # making heatmap
 library(ComplexHeatmap)
+library(circlize)
 significant_genes <- read.table("sig_genes_knockdown.csv", header = TRUE, sep = ',')
-heatmap_genes <- significant_genes[(abs(significant_genes$logFC))>1.6,]
+ensembl_ids <- c("ENSG00000134352", "ENSG00000056558", "ENSG00000120337", "ENSG00000108691", 
+                 "ENSG00000090339", "ENSG00000162692", "ENSG00000007908", "ENSG00000077150",
+                 "ENSG00000100906", "ENSG00000104825", "ENSG00000146232", "ENSG00000173039", "ENSG00000104856", "ENSG00000106366")
+
+heatmap_genes <- significant_genes[significant_genes$X %in% ensembl_ids, ]
 heatmap_genes_counts <- log2_counts[heatmap_genes$X,]
 heatmap_genes_counts <- as.matrix(heatmap_genes_counts)
-colnames(heatmap_genes_counts) <- c("siCTRL1", "siCTRL2", "siCTRL3", "siCOL8A1_1", "siCOL8A1_2", "siCOL8A1_3")
+colnames(heatmap_genes_counts) <- c("Ctrl siRNA 1", "Ctrl siRNA 2", "Ctrl siRNA 3", "COL8A1 siRNA 1", "COL8A1 siRNA 2", "COL8A1 siRNA 3")
 rownames(heatmap_genes_counts) <- gene_symbols_unique[match(rownames(heatmap_genes_counts), names(gene_symbols_unique))]
+
 pheatmap(heatmap_genes_counts,
          scale = "row",                  # Scale data by row (z-score)
          cluster_rows = FALSE,           # Disable row clustering if needed
          cluster_cols = FALSE,           # Disable column clustering if needed
-         color = colorRampPalette(c("red", "black", "green"))(50),
+         color = colorRampPalette(c("blue", "black", "red"))(50),
          show_rownames = TRUE,           # Show row names
          show_colnames = TRUE,
-         name = "Z-score")
-
+         name = "Z-score", column_names_side = "top", cellwidth = 23, cellheight = 23)
